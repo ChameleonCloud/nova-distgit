@@ -1,0 +1,33 @@
+From 965f5a15209e2280d6f2daf91bb9620caba28919 Mon Sep 17 00:00:00 2001
+From: Pierre Riteau <priteau@uchicago.edu>
+Date: Wed, 13 Jan 2016 16:11:09 +0000
+Subject: [PATCH 2/3] Filter available Ironic nodes using a chassis UUID
+
+---
+ nova/virt/ironic/driver.py | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/nova/virt/ironic/driver.py b/nova/virt/ironic/driver.py
+index 0ab992e..0fcdf53 100644
+--- a/nova/virt/ironic/driver.py
++++ b/nova/virt/ironic/driver.py
+@@ -97,6 +97,8 @@ opts = [
+                default=2,
+                help='How often to retry in seconds when a request '
+                     'does conflict'),
++    cfg.StrOpt('chassis_uuid',
++               help='Restrict Ironic nodes to this chassis UUID.'),
+     ]
+ 
+ ironic_group = cfg.OptGroup(name='ironic',
+@@ -511,6 +513,7 @@ class IronicDriver(virt_driver.ComputeDriver):
+ 
+         """
+         try:
++            kwargs['chassis_uuid'] = CONF.ironic.chassis_uuid
+             node_list = self.ironicclient.call("node.list", **kwargs)
+         except exception.NovaException:
+             node_list = []
+-- 
+2.7.0
+
