@@ -16,7 +16,7 @@ Name:             openstack-nova
 # https://review.openstack.org/#/q/I6a35fa0dda798fad93b804d00a46af80f08d475c,n,z
 Epoch:            1
 Version:          12.0.4
-Release:          1.1%{?milestone}%{?dist}
+Release:          1.1.vlans%{?milestone}%{?dist}
 Summary:          OpenStack Compute (nova)
 
 License:          ASL 2.0
@@ -54,6 +54,7 @@ Source24:         nova-sudoers
 Patch0001: 0001-Ironic-Extra-configdrive-metadata-from-Nodes.patch
 Patch0002: 0002-Filter-available-Ironic-nodes-using-a-chassis-UUID.patch
 Patch0003: 0003-Revert-Neutron-Check-port-binding-status.patch
+Patch0004: 0004-Add-support-for-dynamic-VLANs-to-Ironic-driver.patch
 
 Source30:         openstack-nova-novncproxy.sysconfig
 
@@ -496,6 +497,7 @@ This package contains documentation files for nova.
 %patch0001 -p1
 %patch0002 -p1
 %patch0003 -p1
+%patch0004 -p1
 
 find . \( -name .gitignore -o -name .placeholder \) -delete
 

@@ -1,0 +1,194 @@
+From 9dffeb28532c71b820018f02ae14ba85db5e0a95 Mon Sep 17 00:00:00 2001
+From: Pierre Riteau <priteau@uchicago.edu>
+Date: Tue, 6 Jun 2017 19:19:07 +0100
+Subject: [PATCH] Add support for dynamic VLANs to Ironic driver
+
+---
+ nova/virt/ironic/driver.py  |  26 +++++++++++
+ nova/virt/ironic/neutron.py | 102 ++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 128 insertions(+)
+ create mode 100644 nova/virt/ironic/neutron.py
+
+diff --git a/nova/virt/ironic/driver.py b/nova/virt/ironic/driver.py
+index 194221e..78039e0 100644
+--- a/nova/virt/ironic/driver.py
++++ b/nova/virt/ironic/driver.py
+@@ -56,6 +56,8 @@ from nova.virt import hardware
+ from nova.virt.ironic import client_wrapper
+ from nova.virt.ironic import ironic_states
+ from nova.virt.ironic import patcher
++# Dynamic VLANs changes
++from nova.virt.ironic import neutron
+ 
+ 
+ ironic = None
+@@ -200,6 +202,8 @@ class IronicDriver(virt_driver.ComputeDriver):
+             logger.setLevel(level)
+ 
+         self.ironicclient = client_wrapper.IronicClientWrapper()
++        # Dynamic VLANs changes
++        self.neutron = neutron.NeutronDHCPApi()
+ 
+     def _node_resources_unavailable(self, node_obj):
+         """Determine whether the node's resources are in an acceptable state.
+@@ -350,6 +354,13 @@ class IronicDriver(virt_driver.ComputeDriver):
+             memory_mb = 0
+             local_gb = 0
+ 
++        # Dynamic VLANs changes: add SW Tag/Port
++        if 'sw_tag' in nodes_extra_specs:
++            self.swtag = nodes_extra_specs['sw_tag']
++
++        if 'sw_port' in nodes_extra_specs:
++            self.swport = nodes_extra_specs['sw_port']
++
+         dic = {
+             'hypervisor_hostname': str(node.uuid),
+             'hypervisor_type': self._get_hypervisor_type(),
+@@ -370,6 +381,9 @@ class IronicDriver(virt_driver.ComputeDriver):
+                 _get_nodes_supported_instances(cpu_arch)),
+             'stats': jsonutils.dumps(nodes_extra_specs),
+             'numa_topology': None,
++            # Dynamic VLANs changes
++            'sw_tag': self.swtag,
++            'sw_port': self.swport,
+         }
+         return dic
+ 
+@@ -757,6 +771,9 @@ class IronicDriver(virt_driver.ComputeDriver):
+ 
+         self._add_driver_fields(node, instance, image_meta, flavor)
+ 
++        # Dynamic VLANs changes
++        LOG.debug('Ironic node %s %s' % (self.swtag, self.swport))
++
+         # NOTE(Shrews): The default ephemeral device needs to be set for
+         # services (like cloud-init) that depend on it being returned by the
+         # metadata server. Addresses bug https://launchpad.net/bugs/1324286.
+@@ -1094,6 +1111,15 @@ class IronicDriver(virt_driver.ComputeDriver):
+                                   'path': '/extra/vif_port_id',
+                                   'value': port_id}]
+                         self.ironicclient.call("port.update", pif.uuid, patch)
++                        # Dynamic VLANs changes
++                        dic = self._node_resource(node)
++                        LOG.info("Calling neutron.update_realswport: port_id=%(port_id)s switch_id=%(switch_id)s switch_port=%(switch_port)s",
++                            {'port_id': port_id,
++                             'switch_port': self.swport,
++                             'switch_id': self.swtag})
++                        self.neutron.update_realswport(port_id,
++                                                       dic["sw_tag"],
++                                                       dic["sw_port"])
+                         break
+ 
+     def _unplug_vifs(self, node, instance, network_info):
+diff --git a/nova/virt/ironic/neutron.py b/nova/virt/ironic/neutron.py
+new file mode 100644
+index 0000000..e04dcdd
+--- /dev/null
++++ b/nova/virt/ironic/neutron.py
+@@ -0,0 +1,102 @@
++#
++# Copyright 2014 OpenStack Foundation
++# All Rights Reserved
++#
++#    Licensed under the Apache License, Version 2.0 (the "License"); you may
++#    not use this file except in compliance with the License. You may obtain
++#    a copy of the License at
++#
++#         http://www.apache.org/licenses/LICENSE-2.0
++#
++#    Unless required by applicable law or agreed to in writing, software
++#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
++#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
++#    License for the specific language governing permissions and limitations
++#    under the License.
++#
++# version 1.0  7/9/2016  Serena Pan
++#   First working version
++# version 1.1  7/19/2016  Fei Yeh
++#   Authorization Token/Passwords are read in from Neutron and Keystone instead of hard-coded
++
++from oslo_config import cfg
++from oslo_log import log as logging
++from oslo_serialization import jsonutils
++
++from neutronclient.common import exceptions as neutron_client_exc
++from neutronclient.v2_0 import client as clientv20
++
++neutron_opts = [
++    cfg.IntOpt('url_timeout',
++               default=30,
++               help='Timeout value for connecting to neutron in seconds.'),
++    cfg.IntOpt('retries',
++               default=3,
++               help='Client retries in the case of a failed request.'),
++]
++
++CONF = cfg.CONF
++CONF.register_opts(neutron_opts, group='neutron')
++
++LOG = logging.getLogger(__name__)
++
++keystone_opts = [
++    cfg.StrOpt('region_name',
++               help='The region used for getting endpoints of OpenStack'
++                      'services.'),
++]
++
++CONF.register_opts(keystone_opts, group='keystone')
++CONF.import_group('keystone_authtoken', 'keystonemiddleware.auth_token')
++
++def _build_client(token=None):
++    """Utility function to create Neutron client."""
++
++    params = {
++        'timeout': CONF.neutron.url_timeout,
++        'retries': CONF.neutron.retries,
++        'insecure': CONF.keystone_authtoken.insecure,
++        'ca_cert': CONF.keystone_authtoken.certfile,
++    }
++
++    if CONF.neutron.auth_strategy not in ['noauth', 'keystone']:
++        raise exception.ConfigInvalid('Neutron auth_strategy should be '
++                                      'either "noauth" or "keystone".')
++
++    if CONF.neutron.auth_strategy == 'noauth':
++        params['endpoint_url'] = CONF.neutron.url
++        params['auth_strategy'] = 'noauth'
++    elif (CONF.neutron.auth_strategy == 'keystone' and
++          token is None):
++        params['endpoint_url'] = (CONF.neutron.url or
++                                  keystone.get_service_url('neutron'))
++        params['username'] = CONF.keystone_authtoken.admin_user
++        params['tenant_name'] = CONF.keystone_authtoken.admin_tenant_name
++        params['password'] = CONF.keystone_authtoken.admin_password
++        params['auth_url'] = (CONF.keystone_authtoken.auth_uri or '')
++        if CONF.keystone.region_name:
++            params['region_name'] = CONF.keystone.region_name
++    else:
++        params['token'] = token
++        params['endpoint_url'] = CONF.neutron.url
++        params['auth_strategy'] = None
++
++    return clientv20.Client(**params)
++
++class NeutronDHCPApi():
++    """API for communicating to neutron 2.x API."""
++    def update_realswport(self, port_id, sw_id, sw_port):
++        body = {'port': {}}
++        binding_profile = jsonutils.loads('{"local_link_information": [{"port_id": "' + sw_port + '", "switch_id": "' + sw_id + '"}]}')
++        body['port'].update({'binding:profile': binding_profile})
++        # port_req_body = {'port': {"binding:profile":{"local_link_information":[{"switch_id":sw_id,"port_id":sw_port}]}}}
++        # port_path="/ports/%s" % port_id
++        try:
++            # _build_client().update_port(port_id, port_req_body)
++            if not sw_port == "":
++                _build_client().update_port(port_id, body)
++            # _build_client().update_port(port_path, body)
++        except neutron_client_exc.NeutronClientException:
++            print port_id
++            # LOG.exception(_LE("Failed to update Neutron port %s."), port_id)
++            # raise exception.FailedToUpdateDHCPOptOnPort(port_id=port_id)
+-- 
+2.10.2
+
