@@ -1,7 +1,7 @@
-From 670729dba751c1b6c9eb06438863dfd5222ea288 Mon Sep 17 00:00:00 2001
+From a7eef64f82347a74c9939776782bb55baeef6761 Mon Sep 17 00:00:00 2001
 From: Pierre Riteau <priteau@uchicago.edu>
 Date: Tue, 19 Sep 2017 14:47:58 +0100
-Subject: [PATCH 2/2] Disable hash ring
+Subject: [PATCH 2/3] Disable hash ring
 
 ---
  nova/virt/ironic/driver.py | 6 ++++++
@@ -32,5 +32,5 @@ index 784674b7a5..d80388e1a4 100644
          # only services that have something registered in the compute_nodes
          # table will be here so far, and we might be brand new.
 -- 
-2.14.1
+2.16.1
 
