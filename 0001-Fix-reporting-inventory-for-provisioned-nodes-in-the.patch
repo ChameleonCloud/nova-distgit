@@ -1,7 +1,7 @@
-From cd6ec9cc3caf703f0afbb94da3adc5c9b3f137a0 Mon Sep 17 00:00:00 2001
+From 83903bf7c5d75ac046e10494d963d9d0ad62b368 Mon Sep 17 00:00:00 2001
 From: Dmitry Tantsur <divius.inside@gmail.com>
 Date: Fri, 11 Aug 2017 13:52:02 +0200
-Subject: [PATCH 3/3] Fix reporting inventory for provisioned nodes in the
+Subject: [PATCH 1/4] Fix reporting inventory for provisioned nodes in the
  Ironic driver
 
 Currently we report the full inventory for available nodes, and an empty
@@ -125,7 +125,7 @@ index a7addd68df..3f2f03a00d 100644
          for n in node_dicts:
              node = ironic_utils.get_test_node(**n)
 diff --git a/nova/virt/ironic/driver.py b/nova/virt/ironic/driver.py
-index d80388e1a4..11a7de2d8a 100644
+index 562fb3f061..826f4adc59 100644
 --- a/nova/virt/ironic/driver.py
 +++ b/nova/virt/ironic/driver.py
 @@ -185,9 +185,7 @@ class IronicDriver(virt_driver.ComputeDriver):
@@ -192,5 +192,5 @@ index 0000000000..38b5f366e5
 +    class to all ironic nodes, and use it for scheduling of bare metal
 +    instances.
 -- 
-2.16.1
+2.16.3
 

@@ -8,7 +8,7 @@ Name:             openstack-nova
 # https://review.openstack.org/#/q/I6a35fa0dda798fad93b804d00a46af80f08d475c,n,z
 Epoch:            1
 Version:          15.1.0
-Release:          1.2%{?dist}
+Release:          1.3%{?dist}
 Summary:          OpenStack Compute (nova)
 
 License:          ASL 2.0
@@ -50,9 +50,10 @@ Source39:         nova_migration_authorized_keys
 Source40:         nova_migration-rootwrap.conf
 Source41:         nova_migration-rootwrap_cold_migration
 
-Patch0001:        0001-Restrict-Ironic-node-list-by-chassis-UUID.patch
-Patch0002:        0002-Disable-hash-ring.patch
-Patch0003:        0003-Fix-reporting-inventory-for-provisioned-nodes-in-the.patch
+Patch0001:        0001-Fix-reporting-inventory-for-provisioned-nodes-in-the.patch
+Patch0002:        0002-allow-compute-nodes-to-be-associated-with-host-agg.patch
+Patch0003:        0003-Fix-parent-cherry-pick-commit-for-Ocata.patch
+Patch0004:        0004-Add-nodes-to-group-hosts-to-be-checked-against-aggre.patch
 
 BuildArch:        noarch
 BuildRequires:    intltool
@@ -938,7 +939,7 @@ exit 0
 %endif
 
 %changelog
-* Fri Feb 9 2018 Pierre Riteau <priteau@uchicago.edu> 1:15.1.0-1.2
+* Tue Mar 27 2018 Pierre Riteau <priteau@uchicago.edu> 1:15.1.0-1.3
 - Add Chameleon patches
 
 * Wed Jan 03 2018 RDO <dev@lists.rdoproject.org> 1:15.1.0-1
