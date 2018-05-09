@@ -1,7 +1,7 @@
 From b8f0d72a4dda091c924b22254bcf9ab945efa2f3 Mon Sep 17 00:00:00 2001
 From: Jay Pipes <jaypipes@gmail.com>
 Date: Fri, 8 Dec 2017 13:50:55 -0500
-Subject: [PATCH 2/4] allow compute nodes to be associated with host agg
+Subject: [PATCH 2/5] allow compute nodes to be associated with host agg
 
 The Compute API allows for a host_name attribute to be specified
 along with the aggregate's ID to associate or disassociate that host
@@ -31,8 +31,8 @@ Change-Id: Ic7828846148fb365a6d25f97eff117ca4a47e0df
 	nova/compute/api.py
 	nova/tests/unit/compute/test_compute.py
 ---
- nova/compute/api.py                                |  51 +++++++-
- .../tests/functional/compute/test_aggregate_api.py | 139 +++++++++++++++++++++
+ nova/compute/api.py                           |  51 ++++++-
+ .../functional/compute/test_aggregate_api.py  | 139 ++++++++++++++++++
  2 files changed, 186 insertions(+), 4 deletions(-)
  create mode 100644 nova/tests/functional/compute/test_aggregate_api.py
 
@@ -258,5 +258,5 @@ index 0000000000..aeaf3958f2
 +            self.agg_api.remove_host_from_aggregate(self.ctxt, agg_id,
 +                                                    nodename)
 -- 
-2.16.3
+2.17.0
 

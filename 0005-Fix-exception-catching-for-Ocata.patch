@@ -1,0 +1,27 @@
+From 208cbda4c42fe2ba02c0bd8691ec3188959d3222 Mon Sep 17 00:00:00 2001
+From: Pierre Riteau <priteau@uchicago.edu>
+Date: Wed, 9 May 2018 18:53:02 +0100
+Subject: [PATCH 5/5] Fix exception catching for Ocata
+
+In Ocata ComputeHostNotFound can also be raised. We need to catch it to
+proceed to the new code looking up compute nodes.
+---
+ nova/compute/api.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/nova/compute/api.py b/nova/compute/api.py
+index 89b883cc7c..0b10afe715 100644
+--- a/nova/compute/api.py
++++ b/nova/compute/api.py
+@@ -4552,7 +4552,7 @@ class AggregateAPI(base.Base):
+         try:
+             objects.Service.get_by_compute_host(ctx, host_or_node)
+             return True
+-        except exception.HostMappingNotFound:
++        except (exception.HostMappingNotFound, exception.ComputeHostNotFound):
+             pass
+ 
+         # Loop over all cells, looking for a compute node with a
+-- 
+2.17.0
+

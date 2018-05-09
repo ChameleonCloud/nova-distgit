@@ -1,7 +1,7 @@
 From ccceeb94ba6d1b4d6611228d2ab0035341741f70 Mon Sep 17 00:00:00 2001
 From: Roman Dobosz <roman.dobosz@intel.com>
 Date: Mon, 26 Mar 2018 08:17:15 +0000
-Subject: [PATCH 4/4] Add nodes to group hosts to be checked against
+Subject: [PATCH 4/5] Add nodes to group hosts to be checked against
  aggregation
 
 Currently, only hostnames (which origin from machine, on which compute service
@@ -54,5 +54,5 @@ index 5156ed6df9..c703a810a9 100644
 +        return [self.aggs_by_id[agg_id] for agg_id in
 +                self.host_aggregates_map[compute.hypervisor_hostname]]
 -- 
-2.16.3
+2.17.0
 

@@ -8,7 +8,7 @@ Name:             openstack-nova
 # https://review.openstack.org/#/q/I6a35fa0dda798fad93b804d00a46af80f08d475c,n,z
 Epoch:            1
 Version:          15.1.0
-Release:          1.3%{?dist}
+Release:          1.4%{?dist}
 Summary:          OpenStack Compute (nova)
 
 License:          ASL 2.0
@@ -54,6 +54,7 @@ Patch0001:        0001-Fix-reporting-inventory-for-provisioned-nodes-in-the.patc
 Patch0002:        0002-allow-compute-nodes-to-be-associated-with-host-agg.patch
 Patch0003:        0003-Fix-parent-cherry-pick-commit-for-Ocata.patch
 Patch0004:        0004-Add-nodes-to-group-hosts-to-be-checked-against-aggre.patch
+Patch0005:        0005-Fix-exception-catching-for-Ocata.patch
 
 BuildArch:        noarch
 BuildRequires:    intltool

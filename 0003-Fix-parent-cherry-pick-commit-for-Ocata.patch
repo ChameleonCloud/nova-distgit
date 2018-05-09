@@ -1,7 +1,7 @@
 From 97420a13c7e071a682bad4d00622ad1b70b1defb Mon Sep 17 00:00:00 2001
 From: Pierre Riteau <priteau@uchicago.edu>
 Date: Tue, 27 Mar 2018 17:02:01 +0100
-Subject: [PATCH 3/4] Fix parent cherry-pick commit for Ocata
+Subject: [PATCH 3/5] Fix parent cherry-pick commit for Ocata
 
 ---
  nova/compute/api.py | 16 ++--------------
@@ -45,5 +45,5 @@ index 7168c118f8..89b883cc7c 100644
              LOG.debug("Searching for compute nodes matching %s "
                        "found %d results but expected 1 result.",
 -- 
-2.16.3
+2.17.0
 
