@@ -1,0 +1,196 @@
+From 11aab6d8571a8318566eda3e2c7fa0eb7244224f Mon Sep 17 00:00:00 2001
+From: Dmitry Tantsur <divius.inside@gmail.com>
+Date: Fri, 11 Aug 2017 13:52:02 +0200
+Subject: [PATCH 1/5] Fix reporting inventory for provisioned nodes in the
+ Ironic driver
+
+Currently we report the full inventory for available nodes, and an empty
+inventory for nodes that are deployed to or otherwise unavailable.
+
+Reporting an empty inventory for deployed nodes has 2 bad consequences:
+1. Nova tries deleting the inventory for Placement, which fails, because
+   the resources are still in use. This results in nasty warnings.
+2. When adding a resource class to a deployed node, it does not get into
+   inventory, and thus does not get to Placement. It results in an error
+   later on, when the custom resource class is not found.
+
+This patch fixes the latter problem by
+1. Always reporting the custom resource class for deployed nodes, if present.
+2. Reporting VCPUS/memory/disk in exactly the same amount, as it is configured
+   in the ironic node's properties.
+
+As a side effect, the warnings are no longer shown for deployed nodes.
+They still appear, however, for nodes during cleaning.
+
+Partial-Bug: #1710141
+Change-Id: I2fd1e4a95f000da19864e75299afa51527697101
+(cherry picked from commit 9ed692bf8c84e0a702536101cd6cb084d33e1c26)
+(cherry picked from commit c92337bdf80fea4c0a8ebb433bacec4cc07f7a94)
+---
+ nova/tests/unit/virt/ironic/test_driver.py    | 48 +++++--------------
+ nova/virt/ironic/driver.py                    | 18 ++-----
+ ...fix-ironic-inventory-d565c77af83c710d.yaml | 22 +++++++++
+ 3 files changed, 40 insertions(+), 48 deletions(-)
+ create mode 100644 releasenotes/notes/fix-ironic-inventory-d565c77af83c710d.yaml
+
+diff --git a/nova/tests/unit/virt/ironic/test_driver.py b/nova/tests/unit/virt/ironic/test_driver.py
+index a7addd68df..3f2f03a00d 100644
+--- a/nova/tests/unit/virt/ironic/test_driver.py
++++ b/nova/tests/unit/virt/ironic/test_driver.py
+@@ -255,17 +255,12 @@ class IronicDriverTestCase(test.NoDBTestCase):
+                 self.driver._wait_for_power_state, instance, 'fake message')
+         self.assertTrue(fake_validate.called)
+ 
+-    def _test__node_resource(self, has_inst_info):
++    def test__node_resource_with_instance_uuid(self):
+         node_uuid = uuidutils.generate_uuid()
+         props = _get_properties()
+         stats = _get_stats()
+-        if has_inst_info:
+-            instance_info = _get_instance_info()
+-        else:
+-            instance_info = {}
+         node = ironic_utils.get_test_node(uuid=node_uuid,
+                                           instance_uuid=self.instance_uuid,
+-                                          instance_info=instance_info,
+                                           properties=props,
+                                           resource_class='foo')
+ 
+@@ -284,30 +279,18 @@ class IronicDriverTestCase(test.NoDBTestCase):
+         gotkeys = sorted(result.keys())
+         self.assertEqual(wantkeys, gotkeys)
+ 
+-        if has_inst_info:
+-            props_dict = instance_info
+-            expected_cpus = instance_info['vcpus']
+-        else:
+-            props_dict = props
+-            expected_cpus = props['cpus']
+-        self.assertEqual(0, result['vcpus'])
+-        self.assertEqual(expected_cpus, result['vcpus_used'])
+-        self.assertEqual(0, result['memory_mb'])
+-        self.assertEqual(props_dict['memory_mb'], result['memory_mb_used'])
+-        self.assertEqual(0, result['local_gb'])
+-        self.assertEqual(props_dict['local_gb'], result['local_gb_used'])
++        self.assertEqual(props['cpus'], result['vcpus'])
++        self.assertEqual(result['vcpus'], result['vcpus_used'])
++        self.assertEqual(props['memory_mb'], result['memory_mb'])
++        self.assertEqual(result['memory_mb'], result['memory_mb_used'])
++        self.assertEqual(props['local_gb'], result['local_gb'])
++        self.assertEqual(result['local_gb'], result['local_gb_used'])
+ 
+         self.assertEqual(node_uuid, result['hypervisor_hostname'])
+         self.assertEqual(stats, result['stats'])
+         self.assertEqual('foo', result['resource_class'])
+         self.assertIsNone(result['numa_topology'])
+ 
+-    def test__node_resource(self):
+-        self._test__node_resource(True)
+-
+-    def test__node_resource_no_instance_info(self):
+-        self._test__node_resource(False)
+-
+     def test__node_resource_canonicalizes_arch(self):
+         node_uuid = uuidutils.generate_uuid()
+         props = _get_properties()
+@@ -410,12 +393,12 @@ class IronicDriverTestCase(test.NoDBTestCase):
+             instance_info=instance_info)
+ 
+         result = self.driver._node_resource(node)
+-        self.assertEqual(0, result['vcpus'])
+-        self.assertEqual(instance_info['vcpus'], result['vcpus_used'])
+-        self.assertEqual(0, result['memory_mb'])
+-        self.assertEqual(instance_info['memory_mb'], result['memory_mb_used'])
+-        self.assertEqual(0, result['local_gb'])
+-        self.assertEqual(instance_info['local_gb'], result['local_gb_used'])
++        self.assertEqual(props['cpus'], result['vcpus'])
++        self.assertEqual(result['vcpus'], result['vcpus_used'])
++        self.assertEqual(props['memory_mb'], result['memory_mb'])
++        self.assertEqual(result['memory_mb'], result['memory_mb_used'])
++        self.assertEqual(props['local_gb'], result['local_gb'])
++        self.assertEqual(result['local_gb'], result['local_gb_used'])
+         self.assertEqual(node_uuid, result['hypervisor_hostname'])
+         self.assertEqual(stats, result['stats'])
+ 
+@@ -682,11 +665,6 @@ class IronicDriverTestCase(test.NoDBTestCase):
+             {'uuid': uuidutils.generate_uuid(),
+              'power_state': ironic_states.POWER_ON,
+              'provision_state': ironic_states.DELETED},
+-            # a node in AVAILABLE with an instance uuid
+-            {'uuid': uuidutils.generate_uuid(),
+-             'instance_uuid': uuidutils.generate_uuid(),
+-             'power_state': ironic_states.POWER_OFF,
+-             'provision_state': ironic_states.AVAILABLE}
+         ]
+         for n in node_dicts:
+             node = ironic_utils.get_test_node(**n)
+diff --git a/nova/virt/ironic/driver.py b/nova/virt/ironic/driver.py
+index 562fb3f061..826f4adc59 100644
+--- a/nova/virt/ironic/driver.py
++++ b/nova/virt/ironic/driver.py
+@@ -185,9 +185,7 @@ class IronicDriver(virt_driver.ComputeDriver):
+             ironic_states.AVAILABLE, ironic_states.NOSTATE]
+         return (node_obj.maintenance or
+                 node_obj.power_state in bad_power_states or
+-                node_obj.provision_state not in good_provision_states or
+-                (node_obj.provision_state in good_provision_states and
+-                 node_obj.instance_uuid is not None))
++                node_obj.provision_state not in good_provision_states)
+ 
+     def _node_resources_used(self, node_obj):
+         """Determine whether the node's resources are currently used.
+@@ -305,19 +303,13 @@ class IronicDriver(virt_driver.ComputeDriver):
+             # Node is in the process of deploying, is deployed, or is in
+             # the process of cleaning up from a deploy. Report all of its
+             # resources as in use.
+-            instance_info = self._parse_node_instance_info(node, properties)
+-
+-            # Use instance_info instead of properties here is because the
+-            # properties of a deployed node can be changed which will count
+-            # as available resources.
+-            vcpus_used = vcpus = instance_info['vcpus']
+-            memory_mb_used = memory_mb = instance_info['memory_mb']
+-            local_gb_used = local_gb = instance_info['local_gb']
+-
++            vcpus_used = vcpus
++            memory_mb_used = memory_mb
++            local_gb_used = local_gb
+         # Always checking allows us to catch the case where Nova thinks there
+         # are available resources on the Node, but Ironic does not (because it
+         # is not in a usable state): https://launchpad.net/bugs/1503453
+-        if self._node_resources_unavailable(node):
++        elif self._node_resources_unavailable(node):
+             # The node's current state is such that it should not present any
+             # of its resources to Nova
+             vcpus = 0
+diff --git a/releasenotes/notes/fix-ironic-inventory-d565c77af83c710d.yaml b/releasenotes/notes/fix-ironic-inventory-d565c77af83c710d.yaml
+new file mode 100644
+index 0000000000..38b5f366e5
+--- /dev/null
++++ b/releasenotes/notes/fix-ironic-inventory-d565c77af83c710d.yaml
+@@ -0,0 +1,22 @@
++---
++fixes:
++  - |
++    The ironic virt driver no longer reports an empty inventory for bare metal
++    nodes that have instances on them. Instead the custom resource class, VCPU,
++    memory and disk are reported as they are configured on the node.
++issues:
++  - |
++    Due to the changes in scheduling of bare metal nodes, additional resources
++    may be reported as free to Placement. This happens in two cases:
++
++    * An instance is deployed with a flavor smaller than a node (only possible
++      when exact filters are not used)
++    * Node properties were modified in ironic for a deployed node
++
++    When such instances are deployed in Ocata, it is possible for the scheduler
++    to try deploying another instance on the same node. It will cause a failure
++    in the compute and a scheduling retry.
++
++    The recommended work around is to upgrade to Pike and assign a resource
++    class to all ironic nodes, and use it for scheduling of bare metal
++    instances.
+-- 
+2.17.1
+
